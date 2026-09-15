@@ -333,9 +333,9 @@
                 <p class="text-sm" style="color:var(--subtext); margin-top:-12px; margin-bottom:12px;">※カロリー・タンパク質はMyFitnessPal等のアプリで計算し、1日の終わりなどに合計を入力してください。</p>
         <div class="form-group">
           <label>食事メモ</label>
-          <textarea id="record-meal-notes" rows="3" placeholder="朝: トーストと卵
-昼: 鳥の胸肉サラダ
-夜: プロテイン"></textarea>
+          <textarea id="record-meal-notes" rows="4">朝: 
+昼: 
+夜: </textarea>
         </div>
         <div class="form-group">
           <label>睡眠時間 (時間)</label>
@@ -972,7 +972,11 @@
           if(d.calories) getEl('record-cal').value = d.calories;
           if(d.protein) getEl('record-protein').value = d.protein;
                     if(d.sleepHours) getEl('record-sleep').value = d.sleepHours;
-          if(d.mealNotes) getEl('record-meal-notes').value = d.mealNotes;
+          if(d.mealNotes) {
+            getEl('record-meal-notes').value = d.mealNotes;
+          } else {
+            getEl('record-meal-notes').value = "朝: \n昼: \n夜: ";
+          }
           if (d.postureCheck) {
             getEl('chk-neutral').checked = !!d.postureCheck.neutral;
             getEl('chk-swayback').checked = !!d.postureCheck.noSwayback;
@@ -1026,7 +1030,7 @@
             const sleep = parseFloat(getEl('record-sleep').value);
       if (!isNaN(sleep)) data.sleepHours = sleep;
       const mealNotes = getEl('record-meal-notes').value.trim();
-      if (mealNotes) data.mealNotes = mealNotes;
+      if (mealNotes && mealNotes.replace(/\s+/g, '') !== "朝:昼:夜:") data.mealNotes = mealNotes;
       if (photoBase64) data.photoBase64 = photoBase64;
       
       data.postureCheck = {
