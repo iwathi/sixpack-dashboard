@@ -196,17 +196,10 @@
           <input type="number" id="setup-bodyfat" step="0.1" required>
         </div>
         <div class="form-group">
-          <label>目標体重 (kg)</label>
-          <input type="number" id="setup-targetweight" step="0.1" required>
-        </div>
-        <div class="form-group">
-          <label>達成目標日</label>
-          <input type="date" id="setup-targetdate" required>
-        </div>
-        <div class="form-group">
           <label>MATADORプロトコル開始日</label>
           <input type="date" id="setup-startdate" required>
         </div>
+        <p class="text-sm" style="color:var(--subtext); margin-bottom:16px;">※入力された情報を元に、腹筋を割るための「目標体重」と、科学的な「達成期待日」を自動計算します。</p>
         <button type="submit" class="btn">設定を保存して開始</button>
       </form>
     </div>
@@ -427,17 +420,18 @@
     <div class="card">
       <h3>プロフィール</h3>
       <form id="profile-form">
+        <p class="text-sm" style="color:var(--subtext); margin-bottom:12px;">※目標値と期待日は、初期設定時に科学的基準から自動計算されています。</p>
         <div class="form-group">
           <label>目標体脂肪率 (%)</label>
-          <input type="number" id="prof-target-fat" step="0.1" required>
+          <input type="number" id="prof-target-fat" step="0.1" required readonly style="background:#f1f5f9; cursor:not-allowed;">
         </div>
         <div class="form-group">
           <label>目標体重 (kg)</label>
-          <input type="number" id="prof-target-weight" step="0.1" required>
+          <input type="number" id="prof-target-weight" step="0.1" required readonly style="background:#f1f5f9; cursor:not-allowed;">
         </div>
         <div class="form-group">
-          <label>達成目標日</label>
-          <input type="date" id="prof-target-date" required>
+          <label>達成目標日 (期待日)</label>
+          <input type="date" id="prof-target-date" required readonly style="background:#f1f5f9; cursor:not-allowed;">
         </div>
         <div class="form-group">
           <label>MATADOR開始日</label>
@@ -670,15 +664,26 @@
       const height = parseFloat(getEl('setup-height').value);
       const weight = parseFloat(getEl('setup-weight').value);
       const bfPct = parseFloat(getEl('setup-bodyfat').value);
-      const targetWeight = parseFloat(getEl('setup-targetweight').value);
-      const targetDate = getEl('setup-targetdate').value;
       const startDate = getEl('setup-startdate').value;
 
-      // 目標体脂肪率自動設定
+      // 1. 目標体脂肪率自動設定 (腹筋が割れる基準)
       const targetBfPct = gender === 'male' ? 10 : 18;
       
-      // 除脂肪体重(FFM)
+      // 2. 除脂肪体重(FFM)
       const ffm = weight * (1 - bfPct/100);
+      
+      // 3. 目標体重自動計算
+      const targetWeight = parseFloat((ffm / (1 - targetBfPct/100)).toFixed(1));
+      
+      // 4. 達成目標日（達成期待日）の自動計算 (1フェーズ=14日で約1.0kg減量と仮定)
+      const totalToLose = Math.max(0, weight - targetWeight);
+      const deficitPhasesNeeded = Math.ceil(totalToLose / 1.0);
+      const totalPhases = deficitPhasesNeeded > 0 ? (deficitPhasesNeeded * 2) - 1 : 0;
+      const totalDays = totalPhases * 14;
+      
+      const targetDateObj = new Date(startDate);
+      targetDateObj.setDate(targetDateObj.getDate() + totalDays);
+      const targetDate = targetDateObj.toLocaleDateString('sv-SE');
       
       // 基礎代謝(BMR) - ハリス・ベネディクト
       let bmr = 0;
