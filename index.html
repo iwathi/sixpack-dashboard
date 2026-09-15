@@ -317,22 +317,23 @@
           </div>
           <div class="form-group">
             <label>体脂肪率 (%)</label>
-            <input type="number" id="record-bodyfat" step="0.1" required>
+            <input type="number" id="record-bodyfat" step="0.1">
           </div>
         </div>
         <div class="grid-2">
           <div class="form-group">
             <label>摂取カロリー (kcal)</label>
-            <input type="number" id="record-cal" required>
+            <input type="number" id="record-cal">
           </div>
           <div class="form-group">
             <label>タンパク質 (g)</label>
-            <input type="number" id="record-protein" step="0.1" required>
+            <input type="number" id="record-protein" step="0.1">
           </div>
         </div>
+        <p class="text-sm" style="color:var(--subtext); margin-top:-12px; margin-bottom:12px;">※カロリー・タンパク質はMyFitnessPal等のアプリで計算し、1日の終わりなどに合計を入力してください。</p>
         <div class="form-group">
           <label>睡眠時間 (時間)</label>
-          <input type="number" id="record-sleep" step="0.5" required>
+          <input type="number" id="record-sleep" step="0.5">
         </div>
         
         <div class="form-group">
@@ -916,7 +917,7 @@
         // 初日以前の判定
         if (currentDate < startD) {
           calGrid.innerHTML += `
-            <div style="background:#f8f9fa; border: 1px solid #e2e8f0; border-radius:4px; padding:4px 2px; display:flex; flex-direction:column; min-height:50px;">
+            <div onclick="window.editDailyLog('${dateStr}')" style="cursor:pointer; background:#f8f9fa; border: 1px solid #e2e8f0; border-radius:4px; padding:4px 2px; display:flex; flex-direction:column; min-height:50px;">
               <div style="font-size:0.75rem; color:var(--subtext); text-align:left;">${d}</div>
             </div>
           `;
@@ -937,7 +938,7 @@
         const borderStyle = isToday ? 'border: 2px solid var(--primary);' : 'border: 1px solid #e2e8f0;';
         
         calGrid.innerHTML += `
-          <div style="background:${cellBg}; ${borderStyle} border-radius:4px; padding:4px 2px; display:flex; flex-direction:column; justify-content:space-between; min-height:50px;">
+          <div onclick="window.editDailyLog('${dateStr}')" style="cursor:pointer; background:${cellBg}; ${borderStyle} border-radius:4px; padding:4px 2px; display:flex; flex-direction:column; justify-content:space-between; min-height:50px;">
             <div style="font-size:0.75rem; font-weight:bold; color:${isToday ? 'var(--primary)' : 'var(--text)'}; text-align:left; margin-bottom:4px;">${d}</div>
             <div style="font-size:0.65rem; color:var(--subtext); margin-top:auto;">T:${targetW}</div>
             <div style="font-size:0.75rem; font-weight:bold; color:${log ? 'var(--success)' : 'var(--text)'};">A:${actualW}</div>
@@ -952,6 +953,38 @@
     /**
      * デイリーログ関連
      */
+        window.editDailyLog = async (dateStr) => {
+      showLoading();
+      getEl('record-date').value = dateStr;
+      try {
+        const doc = await db.collection('users').doc(currentUser.uid).collection('daily_logs').doc(dateStr).get();
+        getEl('record-form').reset();
+        getEl('record-date').value = dateStr; // form reset clears date, so we set it again
+        
+        if (doc.exists) {
+          const d = doc.data();
+          if(d.weight) getEl('record-weight').value = d.weight;
+          if(d.bodyFatPct) getEl('record-bodyfat').value = d.bodyFatPct;
+          if(d.calories) getEl('record-cal').value = d.calories;
+          if(d.protein) getEl('record-protein').value = d.protein;
+          if(d.sleepHours) getEl('record-sleep').value = d.sleepHours;
+          if (d.postureCheck) {
+            getEl('chk-neutral').checked = !!d.postureCheck.neutral;
+            getEl('chk-swayback').checked = !!d.postureCheck.noSwayback;
+            getEl('chk-scapula').checked = !!d.postureCheck.scapula;
+            getEl('chk-transversus').checked = !!d.postureCheck.transversus;
+            getEl('chk-core').checked = !!d.postureCheck.coreAwareness;
+          }
+        }
+      } catch (e) { console.error(e); }
+      hideLoading();
+      
+      // タブ切り替えUIを模倣して #record へ移動
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelector('.nav-item[href="#record"]').classList.add('active');
+      window.location.hash = '#record';
+    };
+
     let photoBase64 = null;
     getEl('record-photo').addEventListener('change', (e) => {
       const file = e.target.files[0];
@@ -971,31 +1004,46 @@
       showLoading();
       
       const date = getEl('record-date').value;
-      const data = {
-        date,
-        weight: parseFloat(getEl('record-weight').value),
-        bodyFatPct: parseFloat(getEl('record-bodyfat').value),
-        calories: parseInt(getEl('record-cal').value),
-        protein: parseFloat(getEl('record-protein').value),
-        sleepHours: parseFloat(getEl('record-sleep').value),
-        postureCheck: {
-          neutral: getEl('chk-neutral').checked,
-          noSwayback: getEl('chk-swayback').checked,
-          scapula: getEl('chk-scapula').checked,
-          transversus: getEl('chk-transversus').checked,
-          coreAwareness: getEl('chk-core').checked
-        },
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
-      if (photoBase64) data.photoBase64 = photoBase64;
-
-      await db.collection('users').doc(currentUser.uid).collection('daily_logs').doc(date).set(data);
+      const ref = db.collection('users').doc(currentUser.uid).collection('daily_logs').doc(date);
+      const doc = await ref.get();
       
-      // ユーザーの最新体脂肪率更新
-      userData.bodyFatPct = data.bodyFatPct;
+      const data = { 
+        date, 
+        weight: parseFloat(getEl('record-weight').value)
+      };
+      
+      const bf = parseFloat(getEl('record-bodyfat').value);
+      if (!isNaN(bf)) data.bodyFatPct = bf;
+      const cal = parseInt(getEl('record-cal').value);
+      if (!isNaN(cal)) data.calories = cal;
+      const pro = parseFloat(getEl('record-protein').value);
+      if (!isNaN(pro)) data.protein = pro;
+      const sleep = parseFloat(getEl('record-sleep').value);
+      if (!isNaN(sleep)) data.sleepHours = sleep;
+      if (photoBase64) data.photoBase64 = photoBase64;
+      
+      data.postureCheck = {
+        neutral: getEl('chk-neutral').checked,
+        noSwayback: getEl('chk-swayback').checked,
+        scapula: getEl('chk-scapula').checked,
+        transversus: getEl('chk-transversus').checked,
+        coreAwareness: getEl('chk-core').checked
+      };
+
+      if (!doc.exists) {
+        data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        await ref.set(data);
+      } else {
+        await ref.update(data);
+      }
+      
+      // ユーザーの最新体脂肪率・体重更新 (部分更新)
+      if (!isNaN(bf)) userData.bodyFatPct = bf;
       userData.weight = data.weight;
-      userData.ffm = data.weight * (1 - data.bodyFatPct/100);
+      const finalBf = !isNaN(bf) ? bf : (userData.bodyFatPct || 0);
+      userData.ffm = data.weight * (1 - finalBf/100);
       userData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      
       await db.collection('users').doc(currentUser.uid).set(userData);
 
       alert('記録を保存しました');
