@@ -230,12 +230,16 @@
     <!-- KGIセクション -->
     <div class="card">
       <h3>目標達成状況 (KGI)</h3>
-      <div id="home-weight-kgi" style="margin-bottom: 12px; font-weight: bold;">
-        目標: -- kg (--まで 残り--日)
+      <div id="home-weight-kgi" style="margin-bottom: 12px; font-weight: bold; font-size: 1.1rem;">
+        目標体重: <span id="home-target-weight-val">--</span> kg (<span id="home-target-date-val">----/--/--</span>まで)
       </div>
-      <div id="home-weekly-milestone" class="text-sm" style="color: var(--primary); margin-bottom: 16px;">
-        今週のマイルストーン: -- kg
+      <div id="home-days-left" style="color: var(--primary); font-weight: bold; font-size: 1.2rem; margin-bottom: 8px;">
+        残り -- 日
       </div>
+      <div id="home-weekly-milestone" class="text-sm" style="color: var(--success); font-weight: bold; margin-bottom: 16px;">
+        今週のマイルストーン (目安): -- kg
+      </div>
+      
       <h4 style="font-size: 0.9rem;">体脂肪率の到達度</h4>
       <div style="background:#E2E8F0; border-radius:8px; height:20px; overflow:hidden; margin:8px 0;">
         <div id="home-kgi-bar" style="background:var(--success); width:0%; height:100%;"></div>
@@ -243,6 +247,23 @@
       <div style="display:flex; justify-content:space-between;" class="text-sm">
         <span id="home-current-fat">現在: --%</span>
         <span id="home-target-fat">目標: --%</span>
+      </div>
+    </div>
+    
+    <!-- 進捗カレンダー -->
+    <div class="card">
+      <h3 style="display:flex; justify-content:space-between; align-items:center;">
+        進捗カレンダー
+        <span id="calendar-month-label" class="text-sm" style="font-weight:normal; color:var(--subtext);">----年--月</span>
+      </h3>
+      <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center; font-size:0.75rem; margin-bottom:4px; font-weight:bold; color:var(--subtext);">
+        <div style="color:var(--danger);">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div style="color:var(--primary);">土</div>
+      </div>
+      <div id="calendar-grid" style="display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center;">
+        <!-- JSで生成 -->
+      </div>
+      <div class="text-sm" style="margin-top:8px; text-align:right; color:var(--subtext);">
+        上段:目標 / 下段:実績
       </div>
     </div>
 
@@ -708,13 +729,37 @@
       const targetCal = matador.isDeficit ? userData.maintenanceCalories - 500 : userData.maintenanceCalories;
       getEl('home-target-calories').textContent = `本日の目標摂取カロリー: ${targetCal} kcal`;
 
-      // KGI (体脂肪率)
+      // KGI (体重と体脂肪率)
+      const curWeight = userData.weight || 0;
+      const tgtWeight = userData.targetWeight || 0;
+      const tgtDateStr = userData.targetDate || '';
+      getEl('home-target-weight-val').textContent = tgtWeight;
+      getEl('home-target-date-val').textContent = tgtDateStr.replace(/-/g, '/');
+      
+      let daysLeft = 0;
+      let isPlateau = false;
+      if (tgtDateStr) {
+        const tgtD = new Date(tgtDateStr);
+        const nowD = new Date();
+        tgtD.setHours(0,0,0,0);
+        nowD.setHours(0,0,0,0);
+        daysLeft = Math.max(0, Math.floor((tgtD - nowD) / (1000 * 60 * 60 * 24)));
+        getEl('home-days-left').textContent = `残り ${daysLeft} 日`;
+        
+        if (daysLeft > 0) {
+          const dailyDrop = (curWeight - tgtWeight) / daysLeft;
+          const milestoneWeight = (curWeight - (dailyDrop * Math.min(7, daysLeft))).toFixed(1);
+          getEl('home-weekly-milestone').textContent = `今週のマイルストーン: ${milestoneWeight} kg`;
+        } else {
+          getEl('home-weekly-milestone').textContent = `今週のマイルストーン: 達成期限です`;
+        }
+      }
+
       const curFat = userData.bodyFatPct || 0;
       const tgtFat = userData.targetBodyFatPct || 0;
       getEl('home-current-fat').textContent = `現在: ${curFat}%`;
       getEl('home-target-fat').textContent = `目標: ${tgtFat}%`;
       
-      // 進捗バー (適当なベースラインから計算、例:開始時25%などだが単純化)
       let progress = 100 - ((curFat - tgtFat) / 10 * 100);
       if (progress < 0) progress = 0;
       if (progress > 100) progress = 100;
@@ -786,7 +831,34 @@
       });
       getEl('home-core-sets').textContent = `${coreSets} / 10`;
 
-      // Action Plans
+      // 停滞期フラグの設定
+      if (matador.isDeficit && weights.length >= 7) {
+        const maxW = Math.max(...weights);
+        const minW = Math.min(...weights);
+        if (maxW - minW < 0.3) isPlateau = true;
+      }
+
+      // ----------------------------------------------------
+      // アクションプランの自動同期 (システムプラン)
+      // ----------------------------------------------------
+      const sysPlans = [
+        { id: 'sys_deficit', if: 'カロリー制限期の場合', then: '目標カロリー上限内で食事を済ませる', active: matador.isDeficit },
+        { id: 'sys_maintenance', if: '維持期の場合', then: '維持カロリーをしっかり食べ代謝を戻す', active: !matador.isDeficit },
+        { id: 'sys_plateau', if: '停滞期（7日変化なし）の場合', then: '塩分を控え、水分・カリウムを多く摂る', active: isPlateau },
+        { id: 'sys_core', if: '腹筋を割るため', then: 'コアトレ（プランクやアブローラー）を実施する', active: true },
+        { id: 'sys_cardio_gap', if: '有酸素運動をする場合', then: '筋トレと3時間以上間隔を空ける', active: true }
+      ];
+      for (let p of sysPlans) {
+        const ref = db.collection('users').doc(currentUser.uid).collection('action_plans').doc(p.id);
+        const doc = await ref.get();
+        if (!doc.exists) {
+           await ref.set({ triggerIf: p.if, actionThen: p.then, isActive: p.active, completedDates: [], createdAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
+        } else if (doc.data().isActive !== p.active) {
+           await ref.update({ isActive: p.active }).catch(()=>{});
+        }
+      }
+
+      // Action Plans レンダリング
       const apSnap = await db.collection('users').doc(currentUser.uid).collection('action_plans').where('isActive','==',true).get();
       const apListEl = getEl('home-action-list');
       apListEl.innerHTML = '';
@@ -796,16 +868,70 @@
         apSnap.forEach(doc => {
           const plan = doc.data();
           const d = document.createElement('div');
-          d.style.cssText = 'padding:8px; border-bottom:1px solid #eee; display:flex; align-items:center;';
+          d.style.cssText = 'padding:12px; border-bottom:1px solid #eee; display:flex; align-items:center;';
+          const isChecked = plan.completedDates && plan.completedDates.includes(todayStr()) ? 'checked' : '';
           d.innerHTML = `
-            <input type="checkbox" id="chk-ap-${doc.id}" style="margin-right:12px;">
+            <input type="checkbox" id="chk-ap-${doc.id}" style="margin-right:16px; transform:scale(1.5);" ${isChecked} onchange="window.toggleActionPlan('${doc.id}', this.checked)">
             <div>
-              <div class="text-sm text-subtext">もし: ${plan.triggerIf}</div>
-              <div style="font-weight:bold;">する: ${plan.actionThen}</div>
+              <div class="text-sm text-subtext" style="font-size: 0.75rem;">もし: ${plan.triggerIf}</div>
+              <div style="font-weight:bold; font-size: 1rem;">する: ${plan.actionThen}</div>
             </div>
           `;
           apListEl.appendChild(d);
         });
+      }
+
+      // ----------------------------------------------------
+      // 進捗カレンダーの描画 (月間)
+      // ----------------------------------------------------
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = today.getMonth();
+      getEl('calendar-month-label').textContent = `${year}年${month + 1}月`;
+      
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const startDayOfWeek = firstDay.getDay(); 
+      
+      // ログ辞書化
+      const logDict = {};
+      logsSnap.forEach(doc => { logDict[doc.data().date] = doc.data(); });
+      
+      const calGrid = getEl('calendar-grid');
+      calGrid.innerHTML = '';
+      for (let i = 0; i < startDayOfWeek; i++) {
+        calGrid.innerHTML += `<div style="background:#f8f9fa; border-radius:4px; min-height:40px;"></div>`;
+      }
+      
+      const startD = new Date(userData.matadorStartDate || tgtDateStr);
+      const tgtD = new Date(tgtDateStr); tgtD.setHours(0,0,0,0);
+      
+      for (let d = 1; d <= lastDay.getDate(); d++) {
+        const currentDate = new Date(year, month, d);
+        const dateStr = currentDate.toLocaleDateString('sv-SE');
+        const isToday = dateStr === todayStr();
+        const log = logDict[dateStr];
+        
+        let targetW = '--';
+        if (tgtDateStr && tgtWeight && curWeight) {
+           const daysFromNow = (tgtD - currentDate) / (1000*60*60*24);
+           if (daysFromNow >= 0) {
+              const dailyDrop = (curWeight - tgtWeight) / Math.max(1, (tgtD - new Date()) / (1000*60*60*24));
+              targetW = (tgtWeight + (dailyDrop * daysFromNow)).toFixed(1);
+           } else { targetW = tgtWeight; }
+        }
+        
+        const actualW = log && log.weight ? log.weight : '-';
+        const cellBg = isToday ? '#E0E7FF' : '#fff';
+        const borderStyle = isToday ? 'border: 2px solid var(--primary);' : 'border: 1px solid #e2e8f0;';
+        
+        calGrid.innerHTML += `
+          <div style="background:${cellBg}; ${borderStyle} border-radius:4px; padding:4px 2px; display:flex; flex-direction:column; justify-content:space-between; min-height:50px;">
+            <div style="font-size:0.75rem; font-weight:bold; color:${isToday ? 'var(--primary)' : 'var(--text)'}; text-align:left; margin-bottom:4px;">${d}</div>
+            <div style="font-size:0.65rem; color:var(--subtext); margin-top:auto;">T:${targetW}</div>
+            <div style="font-size:0.75rem; font-weight:bold; color:${log ? 'var(--success)' : 'var(--danger)'};">A:${actualW}</div>
+          </div>
+        `;
       }
     }
 
@@ -890,7 +1016,13 @@
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
 
-      await db.collection('users').doc(currentUser.uid).collection('workouts').add(data);
+            await db.collection('users').doc(currentUser.uid).collection('workouts').add(data);
+      
+      // Action Plan: トレーニング反映
+      if (exType === 'anti-extension' || exType === 'cardio' || exType === 'other') {
+        const sysCoreRef = db.collection('users').doc(currentUser.uid).collection('action_plans').doc('sys_core');
+        sysCoreRef.update({ completedDates: firebase.firestore.FieldValue.arrayUnion(date) }).catch(()=>{});
+      }
       
       // 干渉効果チェック (同日の筋トレと有酸素)
       const wSnap = await db.collection('users').doc(currentUser.uid).collection('workouts').where('date','==',date).get();
