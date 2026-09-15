@@ -904,6 +904,7 @@
       }
       
       const startD = new Date(userData.matadorStartDate || tgtDateStr);
+      startD.setHours(0,0,0,0);
       const tgtD = new Date(tgtDateStr); tgtD.setHours(0,0,0,0);
       
       for (let d = 1; d <= lastDay.getDate(); d++) {
@@ -912,6 +913,16 @@
         const isToday = dateStr === todayStr();
         const log = logDict[dateStr];
         
+        // 初日以前の判定
+        if (currentDate < startD) {
+          calGrid.innerHTML += `
+            <div style="background:#f8f9fa; border: 1px solid #e2e8f0; border-radius:4px; padding:4px 2px; display:flex; flex-direction:column; min-height:50px;">
+              <div style="font-size:0.75rem; color:var(--subtext); text-align:left;">${d}</div>
+            </div>
+          `;
+          continue;
+        }
+
         let targetW = '--';
         if (tgtDateStr && tgtWeight && curWeight) {
            const daysFromNow = (tgtD - currentDate) / (1000*60*60*24);
@@ -929,7 +940,10 @@
           <div style="background:${cellBg}; ${borderStyle} border-radius:4px; padding:4px 2px; display:flex; flex-direction:column; justify-content:space-between; min-height:50px;">
             <div style="font-size:0.75rem; font-weight:bold; color:${isToday ? 'var(--primary)' : 'var(--text)'}; text-align:left; margin-bottom:4px;">${d}</div>
             <div style="font-size:0.65rem; color:var(--subtext); margin-top:auto;">T:${targetW}</div>
-            <div style="font-size:0.75rem; font-weight:bold; color:${log ? 'var(--success)' : 'var(--danger)'};">A:${actualW}</div>
+            <div style="font-size:0.75rem; font-weight:bold; color:${log ? 'var(--success)' : 'var(--text)'};">A:${actualW}</div>
+          </div>
+        `;
+      }
           </div>
         `;
       }
