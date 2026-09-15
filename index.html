@@ -330,7 +330,13 @@
             <input type="number" id="record-protein" step="0.1">
           </div>
         </div>
-        <p class="text-sm" style="color:var(--subtext); margin-top:-12px; margin-bottom:12px;">※カロリー・タンパク質はMyFitnessPal等のアプリで計算し、1日の終わりなどに合計を入力してください。</p>
+                <p class="text-sm" style="color:var(--subtext); margin-top:-12px; margin-bottom:12px;">※カロリー・タンパク質はMyFitnessPal等のアプリで計算し、1日の終わりなどに合計を入力してください。</p>
+        <div class="form-group">
+          <label>食事メモ</label>
+          <textarea id="record-meal-notes" rows="3" placeholder="朝: トーストと卵
+昼: 鳥の胸肉サラダ
+夜: プロテイン"></textarea>
+        </div>
         <div class="form-group">
           <label>睡眠時間 (時間)</label>
           <input type="number" id="record-sleep" step="0.5">
@@ -964,7 +970,8 @@
           if(d.bodyFatPct) getEl('record-bodyfat').value = d.bodyFatPct;
           if(d.calories) getEl('record-cal').value = d.calories;
           if(d.protein) getEl('record-protein').value = d.protein;
-          if(d.sleepHours) getEl('record-sleep').value = d.sleepHours;
+                    if(d.sleepHours) getEl('record-sleep').value = d.sleepHours;
+          if(d.mealNotes) getEl('record-meal-notes').value = d.mealNotes;
           if (d.postureCheck) {
             getEl('chk-neutral').checked = !!d.postureCheck.neutral;
             getEl('chk-swayback').checked = !!d.postureCheck.noSwayback;
@@ -1015,8 +1022,10 @@
       if (!isNaN(cal)) data.calories = cal;
       const pro = parseFloat(getEl('record-protein').value);
       if (!isNaN(pro)) data.protein = pro;
-      const sleep = parseFloat(getEl('record-sleep').value);
+            const sleep = parseFloat(getEl('record-sleep').value);
       if (!isNaN(sleep)) data.sleepHours = sleep;
+      const mealNotes = getEl('record-meal-notes').value.trim();
+      if (mealNotes) data.mealNotes = mealNotes;
       if (photoBase64) data.photoBase64 = photoBase64;
       
       data.postureCheck = {
