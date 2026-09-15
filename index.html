@@ -972,13 +972,23 @@
       }
       
       const tgtDateStr = userData.targetDate || '';
-      const curWeight = userData.weight || 0;
+      const initWeight = userData.initialWeight || userData.weight || 0;
       const tgtWeight = userData.targetWeight || 0;
+      const cycleDays = userData.matadorCycleDays || 14;
       
       const startD = new Date(userData.matadorStartDate || tgtDateStr || new Date());
       startD.setHours(0,0,0,0);
       const tgtD = tgtDateStr ? new Date(tgtDateStr) : new Date();
       tgtD.setHours(0,0,0,0);
+      
+      let totalDays = Math.floor((tgtD - startD) / (1000*60*60*24)) + 1;
+      if (totalDays < 0) totalDays = 0;
+      const fullCyclesTotal = Math.floor(totalDays / (cycleDays * 2));
+      const remainderTotal = totalDays % (cycleDays * 2);
+      const totalDeficitDays = (fullCyclesTotal * cycleDays) + Math.min(remainderTotal, cycleDays);
+      
+      const totalWeightLoss = Math.max(0, initWeight - tgtWeight);
+      const dailyDrop = totalDeficitDays > 0 ? (totalWeightLoss / totalDeficitDays) : 0;
       
       for (let d = 1; d <= lastDay.getDate(); d++) {
         const currentDate = new Date(year, month, d);
@@ -997,12 +1007,13 @@
         }
 
         let targetW = '--';
-        if (tgtDateStr && tgtWeight && curWeight) {
-           const daysFromNow = (tgtD - currentDate) / (1000*60*60*24);
-           if (daysFromNow >= 0) {
-              const dailyDrop = (curWeight - tgtWeight) / Math.max(1, (tgtD - new Date()) / (1000*60*60*24));
-              targetW = (tgtWeight + (dailyDrop * daysFromNow)).toFixed(1);
-           }
+        if (tgtDateStr && tgtWeight && initWeight && currentDate >= startD && currentDate <= tgtD) {
+            const daysFromStart = Math.floor((currentDate - startD) / (1000*60*60*24)) + 1;
+            const fullCycles = Math.floor(daysFromStart / (cycleDays * 2));
+            const remainderDays = daysFromStart % (cycleDays * 2);
+            const passedDeficitDays = (fullCycles * cycleDays) + Math.min(remainderDays, cycleDays);
+            
+            targetW = (initWeight - (dailyDrop * passedDeficitDays)).toFixed(1);
         }
         
         const actualW = log && log.weight ? log.weight : '-';
