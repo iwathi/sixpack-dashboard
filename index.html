@@ -252,11 +252,14 @@
     
     <!-- 進捗カレンダー -->
     <div class="card">
-      <h3 style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <button id="cal-prev-btn" class="btn" style="padding:4px 12px; font-size:1rem; min-width:auto; margin-right:8px;" onclick="window.changeCalendarMonth(-1)">&lt;</button>
-        <span style="flex-grow:1; text-align:center;">進捗カレンダー <span id="calendar-month-label" class="text-sm" style="font-weight:normal; color:var(--subtext); display:block;">----年--月</span></span>
-        <button id="cal-next-btn" class="btn" style="padding:4px 12px; font-size:1rem; min-width:auto; margin-left:8px;" onclick="window.changeCalendarMonth(1)">&gt;</button>
-      </h3>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0; font-size:1.1rem;">進捗カレンダー</h3>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button onclick="window.changeCalendarMonth(-1)" style="background:var(--primary); color:white; border:none; border-radius:4px; font-size:1.2rem; padding:4px 16px; cursor:pointer;">&lt;</button>
+          <span id="calendar-month-label" style="font-weight:bold; min-width:70px; text-align:center; font-size:0.85rem; color:var(--subtext);">----年--月</span>
+          <button onclick="window.changeCalendarMonth(1)" style="background:var(--primary); color:white; border:none; border-radius:4px; font-size:1.2rem; padding:4px 16px; cursor:pointer;">&gt;</button>
+        </div>
+      </div>
       <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center; font-size:0.75rem; margin-bottom:4px; font-weight:bold; color:var(--subtext);">
         <div style="color:var(--danger);">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div style="color:var(--primary);">土</div>
       </div>
@@ -853,11 +856,25 @@
       // ----------------------------------------------------
       // アクションプランの自動同期 (システムプラン)
       // ----------------------------------------------------
+      const dayOfWeek = new Date().getDay();
+      let workoutIf = '今日のアクティビティ';
+      let workoutThen = '休養日: ストレッチや軽い散歩で筋肉を休ませる';
+      if (dayOfWeek === 1 || dayOfWeek === 4) {
+         workoutIf = '月・木 (コアトレの日)';
+         workoutThen = 'プランクやアブローラー等の抗伸展種目をしっかり行う';
+      } else if (dayOfWeek === 2 || dayOfWeek === 5) {
+         workoutIf = '火・金 (有酸素・回復の日)';
+         workoutThen = '通勤時のウォーキングや軽い有酸素で脂肪燃焼を促す';
+      } else if (dayOfWeek === 3 || dayOfWeek === 6) {
+         workoutIf = '水・土 (筋力アップの日)';
+         workoutThen = '腹筋以外の部位（スクワットなど）を鍛えて代謝を上げる';
+      }
+
       const sysPlans = [
-        { id: 'sys_deficit', if: 'カロリー制限期の場合', then: '目標カロリー上限内で食事を済ませる', active: matador.isDeficit },
-        { id: 'sys_maintenance', if: '維持期の場合', then: '維持カロリーをしっかり食べ代謝を戻す', active: !matador.isDeficit },
-        { id: 'sys_plateau', if: '停滞期（7日変化なし）の場合', then: '塩分を控え、水分・カリウムを多く摂る', active: isPlateau },
-        { id: 'sys_core', if: '腹筋を割るため', then: 'コアトレ（プランクやアブローラー）を実施する', active: true },
+        { id: 'sys_deficit', if: 'カロリー制限期', then: '目標カロリー上限内で食事を済ませる', active: matador.isDeficit },
+        { id: 'sys_maintenance', if: '維持期', then: '維持カロリーをしっかり食べ代謝を戻す', active: !matador.isDeficit },
+        { id: 'sys_plateau', if: '停滞期（7日変化なし）', then: '塩分を控え、水分・カリウムを多く摂る', active: isPlateau },
+        { id: 'sys_workout_schedule', if: workoutIf, then: workoutThen, active: true },
         { id: 'sys_cardio_gap', if: '有酸素運動をする場合', then: '筋トレと3時間以上間隔を空ける', active: true }
       ];
       for (let p of sysPlans) {
@@ -865,8 +882,11 @@
         const doc = await ref.get();
         if (!doc.exists) {
            await ref.set({ triggerIf: p.if, actionThen: p.then, isActive: p.active, completedDates: [], createdAt: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
-        } else if (doc.data().isActive !== p.active) {
-           await ref.update({ isActive: p.active }).catch(()=>{});
+        } else {
+           const d = doc.data();
+           if (d.isActive !== p.active || d.triggerIf !== p.if || d.actionThen !== p.then) {
+              await ref.update({ isActive: p.active, triggerIf: p.if, actionThen: p.then }).catch(()=>{});
+           }
         }
       }
 
@@ -1103,6 +1123,34 @@
     /**
      * トレーニング記録
      */
+    window.loadWorkoutForDateAndName = async () => {
+      const dateStr = getEl('workout-date').value;
+      const exVal = getEl('workout-name').value;
+      if(!dateStr || !exVal) return;
+      
+      const exName = exVal.split('|')[0];
+      const docId = dateStr + '_' + exName;
+      
+      showLoading();
+      try {
+        const doc = await db.collection('users').doc(currentUser.uid).collection('workouts').doc(docId).get();
+        if (doc.exists) {
+          const d = doc.data();
+          if(d.sets) getEl('workout-sets').value = d.sets;
+          if(d.startTime) getEl('workout-start').value = d.startTime;
+          if(d.endTime) getEl('workout-end').value = d.endTime;
+        } else {
+          getEl('workout-sets').value = '';
+          getEl('workout-start').value = '';
+          getEl('workout-end').value = '';
+        }
+      } catch (e) { console.error(e); }
+      hideLoading();
+    };
+    
+    getEl('workout-date').addEventListener('change', window.loadWorkoutForDateAndName);
+    getEl('workout-name').addEventListener('change', window.loadWorkoutForDateAndName);
+
     getEl('workout-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       showLoading();
@@ -1118,16 +1166,24 @@
         exerciseType: exType,
         sets: parseInt(getEl('workout-sets').value),
         startTime: start,
-        endTime: end,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        endTime: end
       };
-
-            await db.collection('users').doc(currentUser.uid).collection('workouts').add(data);
+      
+      const docId = date + '_' + exName;
+      const ref = db.collection('users').doc(currentUser.uid).collection('workouts').doc(docId);
+      const docSnap = await ref.get();
+      
+      if (!docSnap.exists) {
+        data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        await ref.set(data);
+      } else {
+        await ref.update(data);
+      }
       
       // Action Plan: トレーニング反映
       if (exType === 'anti-extension' || exType === 'cardio' || exType === 'other') {
-        const sysCoreRef = db.collection('users').doc(currentUser.uid).collection('action_plans').doc('sys_core');
-        sysCoreRef.update({ completedDates: firebase.firestore.FieldValue.arrayUnion(date) }).catch(()=>{});
+        const sysRef = db.collection('users').doc(currentUser.uid).collection('action_plans').doc('sys_workout_schedule');
+        sysRef.update({ completedDates: firebase.firestore.FieldValue.arrayUnion(date) }).catch(()=>{});
       }
       
       // 干渉効果チェック (同日の筋トレと有酸素)
