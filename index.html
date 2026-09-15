@@ -352,14 +352,7 @@
           <img id="record-photo-preview" class="hidden" style="width:100%; margin-top:8px; border-radius:8px;">
         </div>
 
-        <div class="form-group">
-          <label>姿勢チェック</label>
-          <div><label><input type="checkbox" id="chk-neutral">骨盤ニュートラルポジション維持</label></div>
-          <div><label><input type="checkbox" id="chk-swayback">反り腰なし</label></div>
-          <div><label><input type="checkbox" id="chk-scapula">肩甲骨の正常な位置</label></div>
-          <div><label><input type="checkbox" id="chk-transversus">腹横筋の活性化</label></div>
-          <div><label><input type="checkbox" id="chk-core">日常生活での体幹意識</label></div>
-        </div>
+
 
         <button type="submit" class="btn">保存する</button>
       </form>
@@ -982,7 +975,7 @@
            if (daysFromNow >= 0) {
               const dailyDrop = (curWeight - tgtWeight) / Math.max(1, (tgtD - new Date()) / (1000*60*60*24));
               targetW = (tgtWeight + (dailyDrop * daysFromNow)).toFixed(1);
-           } else { targetW = tgtWeight; }
+           }
         }
         
         const actualW = log && log.weight ? log.weight : '-';
@@ -1021,13 +1014,7 @@
           } else {
             getEl('record-meal-notes').value = `朝: \n昼: \n夜: `;
           }
-          if (d.postureCheck) {
-            getEl('chk-neutral').checked = !!d.postureCheck.neutral;
-            getEl('chk-swayback').checked = !!d.postureCheck.noSwayback;
-            getEl('chk-scapula').checked = !!d.postureCheck.scapula;
-            getEl('chk-transversus').checked = !!d.postureCheck.transversus;
-            getEl('chk-core').checked = !!d.postureCheck.coreAwareness;
-          }
+
         } else {
           getEl('record-meal-notes').value = `朝: \n昼: \n夜: `;
         }
@@ -1086,13 +1073,7 @@
       if (mealNotes && mealNotes.replace(/\s+/g, '') !== "朝:昼:夜:") data.mealNotes = mealNotes;
       if (photoBase64) data.photoBase64 = photoBase64;
       
-      data.postureCheck = {
-        neutral: getEl('chk-neutral').checked,
-        noSwayback: getEl('chk-swayback').checked,
-        scapula: getEl('chk-scapula').checked,
-        transversus: getEl('chk-transversus').checked,
-        coreAwareness: getEl('chk-core').checked
-      };
+
 
       if (!doc.exists) {
         data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
