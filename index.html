@@ -1467,16 +1467,51 @@
       });
     }
 
+    getEl('prof-recalc-btn').addEventListener('click', () => {
+       const gender = userData.gender || 'male';
+       const height = parseFloat(getEl('prof-height').value);
+       const weight = parseFloat(getEl('prof-init-weight').value);
+       const bfPct = parseFloat(getEl('prof-init-bodyfat').value);
+       const startDate = getEl('prof-matador-start').value;
+       
+       if (!height || !weight || !bfPct || !startDate) {
+          alert('身長、初期体重、初期体脂肪率、開始日を入力してください。');
+          return;
+       }
+
+       const targetBfPct = gender === 'male' ? 10 : 18;
+       const ffm = weight * (1 - bfPct/100);
+       const targetWeight = parseFloat((ffm / (1 - targetBfPct/100)).toFixed(1));
+       
+       const totalToLose = Math.max(0, weight - targetWeight);
+       const deficitPhasesNeeded = Math.ceil(totalToLose / 1.0);
+       const totalPhases = deficitPhasesNeeded > 0 ? (deficitPhasesNeeded * 2) - 1 : 0;
+       const totalDays = totalPhases * 14;
+       
+       const targetDateObj = new Date(startDate);
+       targetDateObj.setDate(targetDateObj.getDate() + totalDays);
+       const targetDate = targetDateObj.toLocaleDateString('sv-SE');
+       
+       getEl('prof-target-fat').value = targetBfPct;
+       getEl('prof-target-weight').value = targetWeight;
+       getEl('prof-target-date').value = targetDate;
+       
+       alert('目標値と期待日を再計算しました。変更を保存するには「プロフィールを保存」ボタンを押してください。');
+    });
+
     getEl('profile-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       showLoading();
+      userData.matadorStartDate = getEl('prof-matador-start').value;
+      userData.height = parseFloat(getEl('prof-height').value);
+      userData.initialWeight = parseFloat(getEl('prof-init-weight').value);
+      userData.initialBodyFatPct = parseFloat(getEl('prof-init-bodyfat').value);
       userData.targetBodyFatPct = parseFloat(getEl('prof-target-fat').value);
       userData.targetWeight = parseFloat(getEl('prof-target-weight').value);
       userData.targetDate = getEl('prof-target-date').value;
-      userData.matadorStartDate = getEl('prof-matador-start').value;
       userData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('users').doc(currentUser.uid).set(userData);
-      alert('プロフィールを更新しました');
+      await db.collection('users').doc(currentUser.uid).set(userData, {merge: true});
+      alert('プロフィールを保存しました。');
       hideLoading();
     });
 
