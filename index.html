@@ -196,6 +196,14 @@
           <input type="number" id="setup-bodyfat" step="0.1" required>
         </div>
         <div class="form-group">
+          <label>目標体重 (kg)</label>
+          <input type="number" id="setup-targetweight" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>達成目標日</label>
+          <input type="date" id="setup-targetdate" required>
+        </div>
+        <div class="form-group">
           <label>MATADORプロトコル開始日</label>
           <input type="date" id="setup-startdate" required>
         </div>
@@ -221,7 +229,14 @@
 
     <!-- KGIセクション -->
     <div class="card">
-      <h3>目標体脂肪率への到達度</h3>
+      <h3>目標達成状況 (KGI)</h3>
+      <div id="home-weight-kgi" style="margin-bottom: 12px; font-weight: bold;">
+        目標: -- kg (--まで 残り--日)
+      </div>
+      <div id="home-weekly-milestone" class="text-sm" style="color: var(--primary); margin-bottom: 16px;">
+        今週のマイルストーン: -- kg
+      </div>
+      <h4 style="font-size: 0.9rem;">体脂肪率の到達度</h4>
       <div style="background:#E2E8F0; border-radius:8px; height:20px; overflow:hidden; margin:8px 0;">
         <div id="home-kgi-bar" style="background:var(--success); width:0%; height:100%;"></div>
       </div>
@@ -389,6 +404,14 @@
         <div class="form-group">
           <label>目標体脂肪率 (%)</label>
           <input type="number" id="prof-target-fat" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>目標体重 (kg)</label>
+          <input type="number" id="prof-target-weight" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>達成目標日</label>
+          <input type="date" id="prof-target-date" required>
         </div>
         <div class="form-group">
           <label>MATADOR開始日</label>
@@ -614,6 +637,8 @@
       const height = parseFloat(getEl('setup-height').value);
       const weight = parseFloat(getEl('setup-weight').value);
       const bfPct = parseFloat(getEl('setup-bodyfat').value);
+      const targetWeight = parseFloat(getEl('setup-targetweight').value);
+      const targetDate = getEl('setup-targetdate').value;
       const startDate = getEl('setup-startdate').value;
 
       // 目標体脂肪率自動設定
@@ -633,7 +658,7 @@
 
       const newUserData = {
         gender, height, weight, bodyFatPct: bfPct, ffm,
-        targetBodyFatPct: targetBfPct, bmr, maintenanceCalories,
+        targetBodyFatPct: targetBfPct, targetWeight, targetDate, bmr, maintenanceCalories,
         matadorStartDate: startDate, matadorCycleDays: 14,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1008,6 +1033,8 @@
     async function loadSettingsData() {
       if(!userData) return;
       getEl('prof-target-fat').value = userData.targetBodyFatPct || '';
+      getEl('prof-target-weight').value = userData.targetWeight || '';
+      getEl('prof-target-date').value = userData.targetDate || '';
       getEl('prof-matador-start').value = userData.matadorStartDate || '';
 
       // Action Plans
@@ -1034,6 +1061,8 @@
       e.preventDefault();
       showLoading();
       userData.targetBodyFatPct = parseFloat(getEl('prof-target-fat').value);
+      userData.targetWeight = parseFloat(getEl('prof-target-weight').value);
+      userData.targetDate = getEl('prof-target-date').value;
       userData.matadorStartDate = getEl('prof-matador-start').value;
       userData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
       await db.collection('users').doc(currentUser.uid).set(userData);
