@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>シックスパック達成管理ダッシュボード</title>
+  
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --primary: #4F46E5;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text: #1E293B;
+      --subtext: #64748B;
+      --border-radius: 16px;
+      --box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      padding-bottom: 80px; /* ボトムナビ分 */
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ユーティリティ */
+    .hidden { display: none !important; }
+    .fade-in { animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* レイアウト・UIコンポーネント */
+    .container { padding: 16px; max-width: 600px; margin: 0 auto; }
+    
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    h1, h2, h3 { margin-bottom: 12px; }
+    
+    .text-center { text-align: center; }
+    .text-sm { font-size: 0.875rem; color: var(--subtext); }
+    .text-danger { color: var(--danger); }
+    .text-success { color: var(--success); }
+    .text-warning { color: var(--warning); }
+    
+    /* フォーム */
+    .form-group { margin-bottom: 16px; }
+    label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 0.9rem; }
+    input, select, textarea {
+      width: 100%; padding: 12px; border: 1px solid #ccc;
+      border-radius: 8px; font-size: 1rem;
+    }
+    input[type="checkbox"] { width: auto; margin-right: 8px; transform: scale(1.2); }
+    
+    /* ボタン */
+    .btn {
+      display: inline-block; width: 100%; padding: 14px;
+      background: var(--primary); color: white;
+      border: none; border-radius: 8px; font-size: 1rem;
+      font-weight: bold; cursor: pointer; text-align: center;
+      transition: background 0.2s;
+    }
+    .btn:active { background: #4338CA; }
+    .btn-secondary { background: var(--subtext); }
+    .btn-danger { background: var(--danger); }
+    .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+
+    /* ボトムナビ */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: 64px; background: var(--card-bg);
+      display: flex; justify-content: space-around; align-items: center;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+      z-index: 1000;
+    }
+    .nav-item {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; color: var(--subtext);
+      text-decoration: none; font-size: 0.7rem; flex: 1;
+      height: 100%; min-width: 44px; min-height: 44px; /* タッチターゲット */
+    }
+    .nav-item.active { color: var(--primary); font-weight: bold; }
+    .nav-icon { font-size: 1.5rem; margin-bottom: 4px; }
+
+    /* ウィジェットグリッド */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* ローディング */
+    #loading-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255,255,255,0.8); z-index: 9999;
+      display: flex; justify-content: center; align-items: center;
+      flex-direction: column;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3; border-top: 4px solid var(--primary);
+      border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    /* タブ */
+    .tabs { display: flex; border-bottom: 1px solid #ccc; margin-bottom: 16px; }
+    .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; }
+    .tab.active { border-bottom: 2px solid var(--primary); font-weight: bold; color: var(--primary); }
+
+    /* アラート */
+    .alert { padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }
+    .alert-info { background: #E0E7FF; color: #3730A3; }
+    .alert-warning { background: #FEF3C7; color: #92400E; }
+    .alert-danger { background: #FEE2E2; color: #991B1B; }
+
+    /* 写真グリッド */
+    .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .photo-item { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
+  </style>
+</head>
+<body>
+
+  <!-- ローディングオーバーレイ -->
+  <div id="loading-overlay" class="hidden">
+    <div class="spinner"></div>
+    <div style="margin-top: 16px; font-weight: bold; color: var(--primary);">ロード中...</div>
+  </div>
+
+  <!-- 1. ログイン画面 -->
+  <div id="view-login" class="view hidden container fade-in">
+    <div class="text-center" style="margin: 40px 0;">
+      <div style="font-size: 4rem;">🍫</div>
+      <h1>SixPack Dashboard</h1>
+      <p class="text-sm">理想のシックスパックを手に入れよう</p>
+    </div>
+    
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" id="tab-login-btn">ログイン</div>
+        <div class="tab" id="tab-register-btn">新規登録</div>
+      </div>
+      
+      <form id="auth-form">
+        <div class="form-group">
+          <label>メールアドレス</label>
+          <input type="email" id="auth-email" required placeholder="email@example.com">
+        </div>
+        <div class="form-group">
+          <label>パスワード</label>
+          <input type="password" id="auth-password" required placeholder="6文字以上">
+        </div>
+        <p id="auth-error" class="text-danger text-sm hidden"></p>
+        <button type="submit" class="btn" id="auth-submit-btn">ログイン</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. 初期設定画面 -->
+  <div id="view-setup" class="view hidden container fade-in">
+    <h2>初期設定</h2>
+    <p class="text-sm" style="margin-bottom:16px;">目標を達成するために基本情報を入力してください。</p>
+    
+    <div class="card">
+      <form id="setup-form">
+        <div class="form-group">
+          <label>性別</label>
+          <select id="setup-gender" required>
+            <option value="male">男性</option>
+            <option value="female">女性</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>身長 (cm)</label>
+          <input type="number" id="setup-height" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>現在の体重 (kg)</label>
+          <input type="number" id="setup-weight" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>現在の体脂肪率 (%)</label>
+          <input type="number" id="setup-bodyfat" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>MATADORプロトコル開始日</label>
+          <input type="date" id="setup-startdate" required>
+        </div>
+        <button type="submit" class="btn">設定を保存して開始</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. ダッシュボード（ホーム） -->
+  <div id="view-home" class="view hidden container fade-in">
+    <!-- ヘッダー（MATADORフェーズ） -->
+    <div class="card" style="background: var(--primary); color: white;">
+      <h2 style="margin:0;" id="home-matador-phase">🔥 カロリー制限期</h2>
+      <p id="home-matador-days" style="margin-top:4px;">残り日数計算中...</p>
+      <p id="home-target-calories" style="font-weight:bold; margin-top:8px;">本日の目標摂取カロリー: --- kcal</p>
+    </div>
+
+    <!-- 停滞期アラート -->
+    <div id="home-plateau-alert" class="alert alert-warning hidden">
+      <strong>⚠️ 停滞期を検知しました</strong><br>
+      過去7日間の体重変動が少ないです。「ウッシュ効果（コルチゾールによる水分貯留）」の可能性があります。焦らず塩分を控え、カリウムを摂取しましょう。
+    </div>
+
+    <!-- KGIセクション -->
+    <div class="card">
+      <h3>目標体脂肪率への到達度</h3>
+      <div style="background:#E2E8F0; border-radius:8px; height:20px; overflow:hidden; margin:8px 0;">
+        <div id="home-kgi-bar" style="background:var(--success); width:0%; height:100%;"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between;" class="text-sm">
+        <span id="home-current-fat">現在: --%</span>
+        <span id="home-target-fat">目標: --%</span>
+      </div>
+    </div>
+
+    <!-- KPIウィジェット -->
+    <h3>週間KPI</h3>
+    <div class="grid-2">
+      <div class="card text-center">
+        <div class="text-sm">体重減少率</div>
+        <div id="home-weight-drop" style="font-size:1.5rem; font-weight:bold;">--%</div>
+        <div class="text-sm" id="home-weight-eval">0.5~1.0%目標</div>
+      </div>
+      <div class="card text-center">
+        <div class="text-sm">食事コンプライアンス</div>
+        <div id="home-diet-comp" style="font-size:1.5rem; font-weight:bold;">--%</div>
+        <div class="text-sm">タンパク質目標達成</div>
+      </div>
+      <div class="card text-center">
+        <div class="text-sm">コアトレ(抗伸展)</div>
+        <div id="home-core-sets" style="font-size:1.5rem; font-weight:bold;">-- / 10</div>
+        <div class="text-sm">セット(週)</div>
+      </div>
+      <div class="card text-center">
+        <div class="text-sm">平均睡眠時間</div>
+        <div id="home-sleep-avg" style="font-size:1.5rem; font-weight:bold;">-- h</div>
+        <div class="text-sm">7.5h目標</div>
+      </div>
+    </div>
+
+    <!-- 本日のアクション（If-Thenプラン） -->
+    <div class="card">
+      <h3>本日のアクション</h3>
+      <div id="home-action-list">
+        <p class="text-sm">アクティブなプランがありません。設定から追加してください。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. デイリーログ（記録） -->
+  <div id="view-record" class="view hidden container fade-in">
+    <h2>デイリーログ記録</h2>
+    <div class="card">
+      <form id="record-form">
+        <div class="form-group">
+          <label>日付</label>
+          <input type="date" id="record-date" required>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>体重 (kg)</label>
+            <input type="number" id="record-weight" step="0.1" required>
+          </div>
+          <div class="form-group">
+            <label>体脂肪率 (%)</label>
+            <input type="number" id="record-bodyfat" step="0.1" required>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>摂取カロリー (kcal)</label>
+            <input type="number" id="record-cal" required>
+          </div>
+          <div class="form-group">
+            <label>タンパク質 (g)</label>
+            <input type="number" id="record-protein" step="0.1" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>睡眠時間 (時間)</label>
+          <input type="number" id="record-sleep" step="0.5" required>
+        </div>
+        
+        <div class="form-group">
+          <label>体型写真</label>
+          <input type="file" id="record-photo" accept="image/*" capture="environment">
+          <img id="record-photo-preview" class="hidden" style="width:100%; margin-top:8px; border-radius:8px;">
+        </div>
+
+        <div class="form-group">
+          <label>姿勢チェック</label>
+          <div><label><input type="checkbox" id="chk-neutral">骨盤ニュートラルポジション維持</label></div>
+          <div><label><input type="checkbox" id="chk-swayback">反り腰なし</label></div>
+          <div><label><input type="checkbox" id="chk-scapula">肩甲骨の正常な位置</label></div>
+          <div><label><input type="checkbox" id="chk-transversus">腹横筋の活性化</label></div>
+          <div><label><input type="checkbox" id="chk-core">日常生活での体幹意識</label></div>
+        </div>
+
+        <button type="submit" class="btn">保存する</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. トレーニング記録 -->
+  <div id="view-workout" class="view hidden container fade-in">
+    <h2>トレーニング記録</h2>
+    
+    <div id="workout-interference-alert" class="alert alert-danger hidden">
+      <strong>⚠️ 干渉効果アラート</strong><br>
+      筋トレと有酸素運動の間に3〜6時間のインターバルが確保されていません。筋肥大効果が低下する恐れがあります。
+    </div>
+
+    <div class="card">
+      <form id="workout-form">
+        <div class="form-group">
+          <label>日付</label>
+          <input type="date" id="workout-date" required>
+        </div>
+        <div class="form-group">
+          <label>種目</label>
+          <select id="workout-name" required>
+            <option value="">選択してください</option>
+            <optgroup label="コア (抗伸展)">
+              <option value="プランク|anti-extension">プランク</option>
+              <option value="アブローラー|anti-extension">アブローラー</option>
+              <option value="デッドバグ|anti-extension">デッドバグ</option>
+              <option value="パロフプレス|anti-extension">パロフプレス</option>
+            </optgroup>
+            <optgroup label="その他コア">
+              <option value="ハンギングレッグレイズ|other">ハンギングレッグレイズ</option>
+            </optgroup>
+            <optgroup label="有酸素運動">
+              <option value="有酸素運動|cardio">有酸素運動 (ランニング等)</option>
+            </optgroup>
+            <optgroup label="その他">
+              <option value="その他|other">その他 (ウェイト等)</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>セット数 (または回数/時間)</label>
+          <input type="number" id="workout-sets" required>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>開始時刻</label>
+            <input type="time" id="workout-start" required>
+          </div>
+          <div class="form-group">
+            <label>終了時刻</label>
+            <input type="time" id="workout-end" required>
+          </div>
+        </div>
+        <button type="submit" class="btn">記録する</button>
+      </form>
+    </div>
+
+    <h3>今週の履歴</h3>
+    <div id="workout-history">
+      <p class="text-sm">履歴がありません。</p>
+    </div>
+  </div>
+
+  <!-- 6/9. 設定 & アクションプラン -->
+  <div id="view-settings" class="view hidden container fade-in">
+    <h2>設定</h2>
+    
+    <div class="card">
+      <h3>プロフィール</h3>
+      <form id="profile-form">
+        <div class="form-group">
+          <label>目標体脂肪率 (%)</label>
+          <input type="number" id="prof-target-fat" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>MATADOR開始日</label>
+          <input type="date" id="prof-matador-start" required>
+        </div>
+        <button type="submit" class="btn btn-outline">プロフィール更新</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>アクションプラン (If-Then)</h3>
+      <p class="text-sm">「もし〜したら、〜する」というルールを決めましょう。</p>
+      <form id="action-plan-form" style="margin-top:12px;">
+        <div class="form-group">
+          <input type="text" id="ap-if" placeholder="もし (例: 朝起きたら)" required>
+        </div>
+        <div class="form-group">
+          <input type="text" id="ap-then" placeholder="する (例: コップ1杯の水を飲む)" required>
+        </div>
+        <button type="submit" class="btn">追加</button>
+      </form>
+      <div id="action-plan-list" style="margin-top:16px;">
+        <!-- リスト動的生成 -->
+      </div>
+    </div>
+
+    <button id="btn-logout" class="btn btn-danger">ログアウト</button>
+  </div>
+
+  <!-- 7/8. 分析・レポート -->
+  <div id="view-analysis" class="view hidden container fade-in">
+    <h2>分析・レポート</h2>
+    
+    <div class="tabs">
+      <div class="tab active" id="tab-charts">グラフ</div>
+      <div class="tab" id="tab-gallery">ギャラリー</div>
+    </div>
+
+    <div id="analysis-charts">
+      <div class="card">
+        <h3>体重・体脂肪率トレンド</h3>
+        <canvas id="chart-weight-fat"></canvas>
+      </div>
+      <div class="card">
+        <h3>カロリーと体重推移</h3>
+        <canvas id="chart-cal-weight"></canvas>
+      </div>
+    </div>
+
+    <div id="analysis-gallery" class="hidden">
+      <div class="card">
+        <h3>体型写真ギャラリー</h3>
+        <div class="photo-grid" id="gallery-grid">
+          <!-- 写真動的生成 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ボトムナビゲーション -->
+  <nav class="bottom-nav hidden" id="bottom-nav">
+    <a href="#home" class="nav-item active" data-target="home">
+      <span class="nav-icon">🏠</span>
+      <span>ホーム</span>
+    </a>
+    <a href="#record" class="nav-item" data-target="record">
+      <span class="nav-icon">📝</span>
+      <span>記録</span>
+    </a>
+    <a href="#workout" class="nav-item" data-target="workout">
+      <span class="nav-icon">💪</span>
+      <span>トレ</span>
+    </a>
+    <a href="#analysis" class="nav-item" data-target="analysis">
+      <span class="nav-icon">📈</span>
+      <span>分析</span>
+    </a>
+    <a href="#settings" class="nav-item" data-target="settings">
+      <span class="nav-icon">⚙️</span>
+      <span>設定</span>
+    </a>
+  </nav>
+
+  <script>
+    /**
+     * Firebase Config & Init
+     */
+    const firebaseConfig = {
+      projectId: "sixpack-dashboard",
+      appId: "1:356578582699:web:782d96739cc7abdda017ee",
+      storageBucket: "sixpack-dashboard.firebasestorage.app",
+      apiKey: "AIzaSyCF8PoGQAEf6y5AFnivlP8fqeGQC-xHlX8",
+      authDomain: "sixpack-dashboard.firebaseapp.com",
+      messagingSenderId: "356578582699"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // グローバル状態
+    let currentUser = null;
+    let userData = null;
+    let chartWeightFat = null;
+    let chartCalWeight = null;
+
+    /**
+     * UI Utils
+     */
+    const showLoading = () => document.getElementById('loading-overlay').classList.remove('hidden');
+    const hideLoading = () => document.getElementById('loading-overlay').classList.add('hidden');
+    const getEl = id => document.getElementById(id);
+    const todayStr = () => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD format local
+
+    /**
+     * Routing
+     */
+    function handleRoute() {
+      if (!currentUser) return; // ログイン前は無視
+      
+      let hash = window.location.hash.substring(1) || 'home';
+      const validRoutes = ['home', 'record', 'workout', 'analysis', 'settings'];
+      if (!validRoutes.includes(hash)) hash = 'home';
+
+      // 画面切り替え
+      document.querySelectorAll('.view').forEach(el => el.classList.add('hidden'));
+      getEl(`view-${hash}`).classList.remove('hidden');
+
+      // ナビゲーションのActive状態更新
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.target === hash);
+      });
+
+      // 画面ごとの初期化処理
+      if (hash === 'home') loadHomeData();
+      if (hash === 'record') { getEl('record-date').value = todayStr(); }
+      if (hash === 'workout') { getEl('workout-date').value = todayStr(); loadWorkoutHistory(); }
+      if (hash === 'analysis') loadAnalysisData();
+      if (hash === 'settings') loadSettingsData();
+    }
+    window.addEventListener('hashchange', handleRoute);
+
+    /**
+     * 認証状態監視
+     */
+    auth.onAuthStateChanged(async (user) => {
+      showLoading();
+      if (user) {
+        currentUser = user;
+        getEl('bottom-nav').classList.remove('hidden');
+        
+        // ユーザーデータ確認
+        const doc = await db.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          userData = doc.data();
+          getEl('view-login').classList.add('hidden');
+          getEl('view-setup').classList.add('hidden');
+          handleRoute();
+        } else {
+          // 初期設定へ
+          getEl('view-login').classList.add('hidden');
+          getEl('view-setup').classList.remove('hidden');
+          getEl('setup-startdate').value = todayStr();
+        }
+      } else {
+        currentUser = null;
+        userData = null;
+        document.querySelectorAll('.view').forEach(el => el.classList.add('hidden'));
+        getEl('bottom-nav').classList.add('hidden');
+        getEl('view-login').classList.remove('hidden');
+      }
+      hideLoading();
+    });
+
+    /**
+     * ログイン・新規登録処理
+     */
+    let isLoginMode = true;
+    getEl('tab-login-btn').addEventListener('click', (e) => {
+      isLoginMode = true;
+      e.target.classList.add('active');
+      getEl('tab-register-btn').classList.remove('active');
+      getEl('auth-submit-btn').textContent = 'ログイン';
+    });
+    getEl('tab-register-btn').addEventListener('click', (e) => {
+      isLoginMode = false;
+      e.target.classList.add('active');
+      getEl('tab-login-btn').classList.remove('active');
+      getEl('auth-submit-btn').textContent = '新規登録';
+    });
+
+    getEl('auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = getEl('auth-email').value;
+      const pwd = getEl('auth-password').value;
+      const errEl = getEl('auth-error');
+      errEl.classList.add('hidden');
+      showLoading();
+
+      try {
+        if (isLoginMode) {
+          await auth.signInWithEmailAndPassword(email, pwd);
+        } else {
+          await auth.createUserWithEmailAndPassword(email, pwd);
+        }
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      }
+      hideLoading();
+    });
+
+    getEl('btn-logout').addEventListener('click', () => auth.signOut());
+
+    /**
+     * 初期設定
+     */
+    getEl('setup-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showLoading();
+      
+      const gender = getEl('setup-gender').value;
+      const height = parseFloat(getEl('setup-height').value);
+      const weight = parseFloat(getEl('setup-weight').value);
+      const bfPct = parseFloat(getEl('setup-bodyfat').value);
+      const startDate = getEl('setup-startdate').value;
+
+      // 目標体脂肪率自動設定
+      const targetBfPct = gender === 'male' ? 10 : 18;
+      
+      // 除脂肪体重(FFM)
+      const ffm = weight * (1 - bfPct/100);
+      
+      // 基礎代謝(BMR) - ハリス・ベネディクト
+      let bmr = 0;
+      if (gender === 'male') {
+        bmr = 13.397*weight + 4.799*height - 5.677*30 + 88.362; // 30歳仮定
+      } else {
+        bmr = 9.247*weight + 3.098*height - 4.330*30 + 447.593;
+      }
+      const maintenanceCalories = Math.round(bmr * 1.5); // 活動係数1.5仮定
+
+      const newUserData = {
+        gender, height, weight, bodyFatPct: bfPct, ffm,
+        targetBodyFatPct: targetBfPct, bmr, maintenanceCalories,
+        matadorStartDate: startDate, matadorCycleDays: 14,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      await db.collection('users').doc(currentUser.uid).set(newUserData);
+      userData = newUserData;
+      
+      hideLoading();
+      window.location.hash = '#home';
+    });
+
+    /**
+     * ロジック: MATADORフェーズ計算
+     */
+    function getMatadorStatus(startDateStr, cycleDays) {
+      const start = new Date(startDateStr);
+      const now = new Date();
+      start.setHours(0,0,0,0);
+      now.setHours(0,0,0,0);
+      
+      const diffTime = now - start;
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays < 0) return { phase: '待機中', daysLeft: 0, isDeficit: false };
+      
+      const currentCycleDay = diffDays % (cycleDays * 2);
+      const isDeficit = currentCycleDay < cycleDays; // 前半が制限期
+      
+      const phase = isDeficit ? 'カロリー制限期' : '維持期';
+      const daysLeft = isDeficit ? (cycleDays - currentCycleDay) : (cycleDays * 2 - currentCycleDay);
+      
+      return { phase, daysLeft, isDeficit };
+    }
+
+    /**
+     * ホーム画面読み込み
+     */
+    async function loadHomeData() {
+      if (!userData) return;
+      
+      // MATADORステータス
+      const matador = getMatadorStatus(userData.matadorStartDate, userData.matadorCycleDays || 14);
+      getEl('home-matador-phase').textContent = `🔥 ${matador.phase}`;
+      getEl('home-matador-days').textContent = `残り: ${matador.daysLeft}日`;
+      
+      const targetCal = matador.isDeficit ? userData.maintenanceCalories - 500 : userData.maintenanceCalories;
+      getEl('home-target-calories').textContent = `本日の目標摂取カロリー: ${targetCal} kcal`;
+
+      // KGI (体脂肪率)
+      const curFat = userData.bodyFatPct || 0;
+      const tgtFat = userData.targetBodyFatPct || 0;
+      getEl('home-current-fat').textContent = `現在: ${curFat}%`;
+      getEl('home-target-fat').textContent = `目標: ${tgtFat}%`;
+      
+      // 進捗バー (適当なベースラインから計算、例:開始時25%などだが単純化)
+      let progress = 100 - ((curFat - tgtFat) / 10 * 100);
+      if (progress < 0) progress = 0;
+      if (progress > 100) progress = 100;
+      getEl('home-kgi-bar').style.width = `${progress}%`;
+
+      // KPIデータ取得 (過去7日)
+      const sevendaysAgo = new Date();
+      sevendaysAgo.setDate(sevendaysAgo.getDate() - 7);
+      
+      const logsSnap = await db.collection('users').doc(currentUser.uid).collection('daily_logs')
+                               .where('date', '>=', sevendaysAgo.toLocaleDateString('sv-SE'))
+                               .orderBy('date').get();
+                               
+      let weights = [];
+      let proteins = [];
+      let sleeps = [];
+      
+      logsSnap.forEach(doc => {
+        const d = doc.data();
+        if(d.weight) weights.push(d.weight);
+        if(d.protein) proteins.push(d.protein);
+        if(d.sleepHours) sleeps.push(d.sleepHours);
+      });
+
+      // 停滞期アラート
+      if (matador.isDeficit && weights.length >= 7) {
+        const maxW = Math.max(...weights);
+        const minW = Math.min(...weights);
+        if (maxW - minW < 0.3) {
+          getEl('home-plateau-alert').classList.remove('hidden');
+        } else {
+          getEl('home-plateau-alert').classList.add('hidden');
+        }
+      }
+
+      // 体重減少率 (簡易計算)
+      if (weights.length >= 2) {
+        const firstW = weights[0];
+        const lastW = weights[weights.length-1];
+        const dropPct = ((firstW - lastW) / firstW * 100).toFixed(1);
+        getEl('home-weight-drop').textContent = `${dropPct}%`;
+        
+        const evalEl = getEl('home-weight-eval');
+        if(dropPct < 0.5 || dropPct > 1.0) {
+          evalEl.classList.add('text-danger');
+        } else {
+          evalEl.classList.remove('text-danger');
+          evalEl.classList.add('text-success');
+        }
+      }
+
+      // 食事コンプライアンス (タンパク質)
+      const proteinTarget = userData.ffm * 2.3;
+      const compDays = proteins.filter(p => p >= proteinTarget).length;
+      const compPct = Math.round((compDays / 7) * 100);
+      getEl('home-diet-comp').textContent = `${compPct}%`;
+
+      // 睡眠
+      const avgSleep = sleeps.length > 0 ? (sleeps.reduce((a,b)=>a+b,0)/sleeps.length).toFixed(1) : 0;
+      getEl('home-sleep-avg').textContent = `${avgSleep} h`;
+
+      // コアトレセット数
+      const wSnap = await db.collection('users').doc(currentUser.uid).collection('workouts')
+                            .where('date', '>=', sevendaysAgo.toLocaleDateString('sv-SE')).get();
+      let coreSets = 0;
+      wSnap.forEach(d => {
+        const data = d.data();
+        if (data.exerciseType === 'anti-extension') coreSets += parseInt(data.sets||0);
+      });
+      getEl('home-core-sets').textContent = `${coreSets} / 10`;
+
+      // Action Plans
+      const apSnap = await db.collection('users').doc(currentUser.uid).collection('action_plans').where('isActive','==',true).get();
+      const apListEl = getEl('home-action-list');
+      apListEl.innerHTML = '';
+      if(apSnap.empty) {
+        apListEl.innerHTML = '<p class="text-sm">アクティブなプランがありません。</p>';
+      } else {
+        apSnap.forEach(doc => {
+          const plan = doc.data();
+          const d = document.createElement('div');
+          d.style.cssText = 'padding:8px; border-bottom:1px solid #eee; display:flex; align-items:center;';
+          d.innerHTML = `
+            <input type="checkbox" id="chk-ap-${doc.id}" style="margin-right:12px;">
+            <div>
+              <div class="text-sm text-subtext">もし: ${plan.triggerIf}</div>
+              <div style="font-weight:bold;">する: ${plan.actionThen}</div>
+            </div>
+          `;
+          apListEl.appendChild(d);
+        });
+      }
+    }
+
+    /**
+     * デイリーログ関連
+     */
+    let photoBase64 = null;
+    getEl('record-photo').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        photoBase64 = ev.target.result;
+        const img = getEl('record-photo-preview');
+        img.src = photoBase64;
+        img.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    getEl('record-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showLoading();
+      
+      const date = getEl('record-date').value;
+      const data = {
+        date,
+        weight: parseFloat(getEl('record-weight').value),
+        bodyFatPct: parseFloat(getEl('record-bodyfat').value),
+        calories: parseInt(getEl('record-cal').value),
+        protein: parseFloat(getEl('record-protein').value),
+        sleepHours: parseFloat(getEl('record-sleep').value),
+        postureCheck: {
+          neutral: getEl('chk-neutral').checked,
+          noSwayback: getEl('chk-swayback').checked,
+          scapula: getEl('chk-scapula').checked,
+          transversus: getEl('chk-transversus').checked,
+          coreAwareness: getEl('chk-core').checked
+        },
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      if (photoBase64) data.photoBase64 = photoBase64;
+
+      await db.collection('users').doc(currentUser.uid).collection('daily_logs').doc(date).set(data);
+      
+      // ユーザーの最新体脂肪率更新
+      userData.bodyFatPct = data.bodyFatPct;
+      userData.weight = data.weight;
+      userData.ffm = data.weight * (1 - data.bodyFatPct/100);
+      userData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('users').doc(currentUser.uid).set(userData);
+
+      alert('記録を保存しました');
+      photoBase64 = null;
+      getEl('record-photo-preview').classList.add('hidden');
+      e.target.reset();
+      getEl('record-date').value = todayStr();
+      
+      hideLoading();
+      window.location.hash = '#home';
+    });
+
+    /**
+     * トレーニング記録
+     */
+    getEl('workout-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showLoading();
+      
+      const date = getEl('workout-date').value;
+      const [exName, exType] = getEl('workout-name').value.split('|');
+      const start = getEl('workout-start').value;
+      const end = getEl('workout-end').value;
+
+      const data = {
+        date,
+        exerciseName: exName,
+        exerciseType: exType,
+        sets: parseInt(getEl('workout-sets').value),
+        startTime: start,
+        endTime: end,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      await db.collection('users').doc(currentUser.uid).collection('workouts').add(data);
+      
+      // 干渉効果チェック (同日の筋トレと有酸素)
+      const wSnap = await db.collection('users').doc(currentUser.uid).collection('workouts').where('date','==',date).get();
+      let hasCardio = false; let hasResist = false;
+      wSnap.forEach(d => {
+        if(d.data().exerciseType === 'cardio') hasCardio = true;
+        else hasResist = true;
+      });
+      if(hasCardio && hasResist) {
+        getEl('workout-interference-alert').classList.remove('hidden');
+      }
+
+      e.target.reset();
+      getEl('workout-date').value = todayStr();
+      loadWorkoutHistory();
+      hideLoading();
+    });
+
+    async function loadWorkoutHistory() {
+      const histEl = getEl('workout-history');
+      histEl.innerHTML = '読み込み中...';
+      const snap = await db.collection('users').doc(currentUser.uid).collection('workouts')
+                           .orderBy('createdAt', 'desc').limit(10).get();
+      
+      if(snap.empty) {
+        histEl.innerHTML = '<p class="text-sm">履歴がありません。</p>';
+        return;
+      }
+      histEl.innerHTML = '';
+      snap.forEach(doc => {
+        const d = doc.data();
+        histEl.innerHTML += `
+          <div class="card" style="padding:12px; margin-bottom:8px;">
+            <div style="font-weight:bold;">${d.date} - ${d.exerciseName}</div>
+            <div class="text-sm">${d.sets} セット / ${d.startTime} ~ ${d.endTime}</div>
+          </div>
+        `;
+      });
+    }
+
+    /**
+     * 分析・レポート
+     */
+    getEl('tab-charts').addEventListener('click', (e) => {
+      e.target.classList.add('active');
+      getEl('tab-gallery').classList.remove('active');
+      getEl('analysis-charts').classList.remove('hidden');
+      getEl('analysis-gallery').classList.add('hidden');
+    });
+    getEl('tab-gallery').addEventListener('click', (e) => {
+      e.target.classList.add('active');
+      getEl('tab-charts').classList.remove('active');
+      getEl('analysis-charts').classList.add('hidden');
+      getEl('analysis-gallery').classList.remove('hidden');
+    });
+
+    async function loadAnalysisData() {
+      showLoading();
+      // 過去30日のログ取得
+      const d30 = new Date(); d30.setDate(d30.getDate() - 30);
+      const snap = await db.collection('users').doc(currentUser.uid).collection('daily_logs')
+                           .where('date', '>=', d30.toLocaleDateString('sv-SE'))
+                           .orderBy('date').get();
+      
+      let labels = [];
+      let weights = [];
+      let fats = [];
+      let cals = [];
+      let photos = [];
+
+      snap.forEach(doc => {
+        const d = doc.data();
+        labels.push(d.date.substring(5)); // MM-DD
+        if(d.weight) weights.push(d.weight);
+        if(d.bodyFatPct) fats.push(d.bodyFatPct);
+        if(d.calories) cals.push(d.calories);
+        if(d.photoBase64) photos.push({date: d.date, img: d.photoBase64});
+      });
+
+      // グラフ1: 体重・体脂肪率
+      if (chartWeightFat) chartWeightFat.destroy();
+      const ctx1 = getEl('chart-weight-fat').getContext('2d');
+      chartWeightFat = new Chart(ctx1, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: '体重(kg)', data: weights, borderColor: '#4F46E5', yAxisID: 'y' },
+            { label: '体脂肪率(%)', data: fats, borderColor: '#EF4444', yAxisID: 'y1' }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { type: 'linear', display: true, position: 'left' },
+            y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }
+          }
+        }
+      });
+
+      // グラフ2: カロリーと体重推移
+      if (chartCalWeight) chartCalWeight.destroy();
+      const ctx2 = getEl('chart-cal-weight').getContext('2d');
+      chartCalWeight = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { type: 'line', label: '体重(kg)', data: weights, borderColor: '#4F46E5', yAxisID: 'y1' },
+            { type: 'bar', label: '摂取カロリー', data: cals, backgroundColor: '#10B981', yAxisID: 'y' }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { type: 'linear', display: true, position: 'left' },
+            y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false } }
+          }
+        }
+      });
+
+      // ギャラリー生成
+      const gGrid = getEl('gallery-grid');
+      gGrid.innerHTML = '';
+      photos.forEach(p => {
+        gGrid.innerHTML += `
+          <div style="position:relative;">
+            <img src="${p.img}" class="photo-item">
+            <div style="position:absolute; bottom:4px; left:4px; background:rgba(0,0,0,0.5); color:white; font-size:10px; padding:2px 4px; border-radius:4px;">${p.date}</div>
+          </div>
+        `;
+      });
+
+      hideLoading();
+    }
+
+    /**
+     * 設定関連
+     */
+    async function loadSettingsData() {
+      if(!userData) return;
+      getEl('prof-target-fat').value = userData.targetBodyFatPct || '';
+      getEl('prof-matador-start').value = userData.matadorStartDate || '';
+
+      // Action Plans
+      const snap = await db.collection('users').doc(currentUser.uid).collection('action_plans').get();
+      const listEl = getEl('action-plan-list');
+      listEl.innerHTML = '';
+      snap.forEach(doc => {
+        const d = doc.data();
+        listEl.innerHTML += `
+          <div class="card" style="padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div class="text-sm">もし: ${d.triggerIf}</div>
+              <div style="font-weight:bold;">する: ${d.actionThen}</div>
+            </div>
+            <div>
+              <button class="btn btn-danger" style="padding:4px 8px; font-size:12px; width:auto;" onclick="deleteActionPlan('${doc.id}')">削除</button>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    getEl('profile-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showLoading();
+      userData.targetBodyFatPct = parseFloat(getEl('prof-target-fat').value);
+      userData.matadorStartDate = getEl('prof-matador-start').value;
+      userData.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('users').doc(currentUser.uid).set(userData);
+      alert('プロフィールを更新しました');
+      hideLoading();
+    });
+
+    getEl('action-plan-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showLoading();
+      const data = {
+        triggerIf: getEl('ap-if').value,
+        actionThen: getEl('ap-then').value,
+        isActive: true,
+        completedDates: [],
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      await db.collection('users').doc(currentUser.uid).collection('action_plans').add(data);
+      e.target.reset();
+      loadSettingsData();
+      hideLoading();
+    });
+
+    window.deleteActionPlan = async (id) => {
+      if(confirm('削除しますか？')) {
+        showLoading();
+        await db.collection('users').doc(currentUser.uid).collection('action_plans').doc(id).delete();
+        loadSettingsData();
+        hideLoading();
+      }
+    };
+
+  </script>
+</body>
+</html>
