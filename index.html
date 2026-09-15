@@ -485,6 +485,10 @@
         <h3>カロリーと体重推移</h3>
         <canvas id="chart-cal-weight"></canvas>
       </div>
+      <div class="card" id="analysis-plan-card">
+        <h3>計画の全体像 (スケジュール)</h3>
+        <div id="analysis-plan-overview">計画データがありません。設定から目標を設定してください。</div>
+      </div>
     </div>
 
     <div id="analysis-gallery" class="hidden">
@@ -1286,6 +1290,69 @@
           }
         }
       });
+
+      // 計画の全体像 (MATADORスケジュール) 生成
+      if (userData.matadorStartDate && userData.targetDate && userData.targetWeight) {
+        const pOverview = getEl('analysis-plan-overview');
+        if(pOverview) {
+          const startDate = new Date(userData.matadorStartDate);
+          const tgtDate = new Date(userData.targetDate);
+          startDate.setHours(0,0,0,0);
+          tgtDate.setHours(0,0,0,0);
+          
+          let scheduleHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <span style="font-weight:bold; color:var(--primary);">目標: ${userData.targetWeight}kg</span>
+              <span class="text-sm text-subtext">期限: ${userData.targetDate.replace(/-/g,'/')}</span>
+            </div>
+            <div style="font-size:0.85rem;">
+          `;
+          
+          let cur = new Date(startDate);
+          let phaseCount = 1;
+          const cycleDays = userData.matadorCycleDays || 14;
+          
+          while(cur <= tgtDate && phaseCount <= 20) {
+             const isDeficit = (phaseCount % 2 !== 0);
+             const phaseName = isDeficit ? '<span style="color:var(--danger);font-weight:bold;">減量期</span>' : '<span style="color:var(--success);font-weight:bold;">維持期</span>';
+             const phaseGoal = isDeficit ? `目標カロリー: ${userData.maintenanceCalories - 500}kcal<br><span style="font-size:0.75rem;color:var(--subtext);">脂肪を燃やす期間。カロリー制限を徹底。</span>` : `目標カロリー: ${userData.maintenanceCalories}kcal<br><span style="font-size:0.75rem;color:var(--subtext);">代謝低下を防ぐ期間。しっかり食べる。</span>`;
+             
+             const phaseEnd = new Date(cur);
+             phaseEnd.setDate(phaseEnd.getDate() + cycleDays - 1);
+             const pEndStr = phaseEnd > tgtDate ? tgtDate : phaseEnd;
+             
+             const startStr = `${cur.getMonth()+1}/${cur.getDate()}`;
+             const endStr = `${pEndStr.getMonth()+1}/${pEndStr.getDate()}`;
+             
+             // 過去・現在・未来の判定 (UIの透明度調整)
+             const now = new Date(); now.setHours(0,0,0,0);
+             let opacity = 1.0;
+             let badge = '';
+             if (pEndStr < now) {
+                opacity = 0.5; // 過去
+             } else if (cur <= now && now <= pEndStr) {
+                badge = '<span style="background:var(--primary);color:white;padding:2px 4px;border-radius:4px;font-size:0.65rem;margin-left:8px;">現在</span>';
+             }
+             
+             scheduleHTML += `
+               <div style="display:flex; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #eee; opacity:${opacity};">
+                 <div style="width:70px; flex-shrink:0; font-weight:bold; color:var(--subtext);">
+                   ${startStr}<br>〜${endStr}
+                 </div>
+                 <div style="flex-grow:1; padding-left:12px; border-left:3px solid ${isDeficit ? 'var(--danger)' : 'var(--success)'};">
+                   <div style="margin-bottom:4px;">${phaseName} ${badge}</div>
+                   <div>${phaseGoal}</div>
+                 </div>
+               </div>
+             `;
+             
+             cur.setDate(cur.getDate() + cycleDays);
+             phaseCount++;
+          }
+          scheduleHTML += `</div>`;
+          pOverview.innerHTML = scheduleHTML;
+        }
+      }
 
       // ギャラリー生成
       const gGrid = getEl('gallery-grid');
