@@ -252,9 +252,10 @@
     
     <!-- 進捗カレンダー -->
     <div class="card">
-      <h3 style="display:flex; justify-content:space-between; align-items:center;">
-        進捗カレンダー
-        <span id="calendar-month-label" class="text-sm" style="font-weight:normal; color:var(--subtext);">----年--月</span>
+      <h3 style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <button id="cal-prev-btn" class="btn" style="padding:4px 12px; font-size:1rem; min-width:auto; margin-right:8px;" onclick="window.changeCalendarMonth(-1)">&lt;</button>
+        <span style="flex-grow:1; text-align:center;">進捗カレンダー <span id="calendar-month-label" class="text-sm" style="font-weight:normal; color:var(--subtext); display:block;">----年--月</span></span>
+        <button id="cal-next-btn" class="btn" style="padding:4px 12px; font-size:1rem; min-width:auto; margin-left:8px;" onclick="window.changeCalendarMonth(1)">&gt;</button>
       </h3>
       <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center; font-size:0.75rem; margin-bottom:4px; font-weight:bold; color:var(--subtext);">
         <div style="color:var(--danger);">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div style="color:var(--primary);">土</div>
@@ -576,7 +577,10 @@
 
       // 画面ごとの初期化処理
       if (hash === 'home') loadHomeData();
-      if (hash === 'record') { getEl('record-date').value = todayStr(); }
+      if (hash === 'record') { 
+        if(!getEl('record-date').value) getEl('record-date').value = todayStr();
+        window.loadRecordForDate(getEl('record-date').value);
+      }
       if (hash === 'workout') { getEl('workout-date').value = todayStr(); loadWorkoutHistory(); }
       if (hash === 'analysis') loadAnalysisData();
       if (hash === 'settings') loadSettingsData();
@@ -892,18 +896,34 @@
       // ----------------------------------------------------
       // 進捗カレンダーの描画 (月間)
       // ----------------------------------------------------
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = today.getMonth();
+      await window.renderCalendar(window.currentCalendarDate.getFullYear(), window.currentCalendarDate.getMonth());
+    }
+
+    // カレンダー状態
+    window.currentCalendarDate = new Date();
+    window.changeCalendarMonth = async (offset) => {
+      window.currentCalendarDate.setMonth(window.currentCalendarDate.getMonth() + offset);
+      await window.renderCalendar(window.currentCalendarDate.getFullYear(), window.currentCalendarDate.getMonth());
+    };
+
+    window.renderCalendar = async (year, month) => {
+      if (!userData) return;
       getEl('calendar-month-label').textContent = `${year}年${month + 1}月`;
       
       const firstDay = new Date(year, month, 1);
       const lastDay = new Date(year, month + 1, 0);
       const startDayOfWeek = firstDay.getDay(); 
       
-      // ログ辞書化
+      // 当月のログを取得
+      const firstDayStr = firstDay.toLocaleDateString('sv-SE');
+      const lastDayStr = lastDay.toLocaleDateString('sv-SE');
+      const monthLogsSnap = await db.collection('users').doc(currentUser.uid).collection('daily_logs')
+        .where('date', '>=', firstDayStr)
+        .where('date', '<=', lastDayStr)
+        .get();
+        
       const logDict = {};
-      logsSnap.forEach(doc => { logDict[doc.data().date] = doc.data(); });
+      monthLogsSnap.forEach(doc => { logDict[doc.data().date] = doc.data(); });
       
       const calGrid = getEl('calendar-grid');
       calGrid.innerHTML = '';
@@ -911,9 +931,14 @@
         calGrid.innerHTML += `<div style="background:#f8f9fa; border-radius:4px; min-height:40px;"></div>`;
       }
       
-      const startD = new Date(userData.matadorStartDate || tgtDateStr);
+      const tgtDateStr = userData.targetDate || '';
+      const curWeight = userData.weight || 0;
+      const tgtWeight = userData.targetWeight || 0;
+      
+      const startD = new Date(userData.matadorStartDate || tgtDateStr || new Date());
       startD.setHours(0,0,0,0);
-      const tgtD = new Date(tgtDateStr); tgtD.setHours(0,0,0,0);
+      const tgtD = tgtDateStr ? new Date(tgtDateStr) : new Date();
+      tgtD.setHours(0,0,0,0);
       
       for (let d = 1; d <= lastDay.getDate(); d++) {
         const currentDate = new Date(year, month, d);
@@ -957,13 +982,12 @@
     /**
      * デイリーログ関連
      */
-        window.editDailyLog = async (dateStr) => {
+        window.loadRecordForDate = async (dateStr) => {
       showLoading();
-      getEl('record-date').value = dateStr;
       try {
         const doc = await db.collection('users').doc(currentUser.uid).collection('daily_logs').doc(dateStr).get();
         getEl('record-form').reset();
-        getEl('record-date').value = dateStr; // form reset clears date, so we set it again
+        getEl('record-date').value = dateStr;
         
         if (doc.exists) {
           const d = doc.data();
@@ -971,11 +995,11 @@
           if(d.bodyFatPct) getEl('record-bodyfat').value = d.bodyFatPct;
           if(d.calories) getEl('record-cal').value = d.calories;
           if(d.protein) getEl('record-protein').value = d.protein;
-                    if(d.sleepHours) getEl('record-sleep').value = d.sleepHours;
+          if(d.sleepHours) getEl('record-sleep').value = d.sleepHours;
           if(d.mealNotes) {
             getEl('record-meal-notes').value = d.mealNotes;
           } else {
-            getEl('record-meal-notes').value = "朝: \n昼: \n夜: ";
+            getEl('record-meal-notes').value = `朝: \n昼: \n夜: `;
           }
           if (d.postureCheck) {
             getEl('chk-neutral').checked = !!d.postureCheck.neutral;
@@ -984,11 +1008,16 @@
             getEl('chk-transversus').checked = !!d.postureCheck.transversus;
             getEl('chk-core').checked = !!d.postureCheck.coreAwareness;
           }
+        } else {
+          getEl('record-meal-notes').value = `朝: \n昼: \n夜: `;
         }
       } catch (e) { console.error(e); }
       hideLoading();
-      
-      // タブ切り替えUIを模倣して #record へ移動
+    };
+
+    window.editDailyLog = async (dateStr) => {
+      getEl('record-date').value = dateStr;
+      await window.loadRecordForDate(dateStr);
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       document.querySelector('.nav-item[href="#record"]').classList.add('active');
       window.location.hash = '#record';
@@ -1006,6 +1035,10 @@
         img.classList.remove('hidden');
       };
       reader.readAsDataURL(file);
+    });
+
+    getEl('record-date').addEventListener('change', (e) => {
+      if (e.target.value) window.loadRecordForDate(e.target.value);
     });
 
     getEl('record-form').addEventListener('submit', async (e) => {
