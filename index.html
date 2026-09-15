@@ -420,7 +420,27 @@
     <div class="card">
       <h3>プロフィール</h3>
       <form id="profile-form">
-        <p class="text-sm" style="color:var(--subtext); margin-bottom:12px;">※目標値と期待日は、初期設定時に科学的基準から自動計算されています。</p>
+        <div class="form-group">
+          <label>MATADOR開始日</label>
+          <input type="date" id="prof-matador-start" required>
+        </div>
+        <div class="form-group">
+          <label>身長 (cm)</label>
+          <input type="number" id="prof-height" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>開始時の体重 (kg)</label>
+          <input type="number" id="prof-init-weight" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>開始時の体脂肪率 (%)</label>
+          <input type="number" id="prof-init-bodyfat" step="0.1" required>
+        </div>
+        
+        <button type="button" class="btn btn-outline" id="prof-recalc-btn" style="margin-bottom:16px;">🔄 上記の初期値をもとに目標を再計算</button>
+
+        <p class="text-sm" style="color:var(--subtext); margin-bottom:12px;">※以下の目標値と期待日は科学的基準から自動計算されます。</p>
+        
         <div class="form-group">
           <label>目標体脂肪率 (%)</label>
           <input type="number" id="prof-target-fat" step="0.1" required readonly style="background:#f1f5f9; cursor:not-allowed;">
@@ -433,11 +453,8 @@
           <label>達成目標日 (期待日)</label>
           <input type="date" id="prof-target-date" required readonly style="background:#f1f5f9; cursor:not-allowed;">
         </div>
-        <div class="form-group">
-          <label>MATADOR開始日</label>
-          <input type="date" id="prof-matador-start" required>
-        </div>
-        <button type="submit" class="btn btn-outline">プロフィール更新</button>
+        
+        <button type="submit" class="btn">プロフィールを保存</button>
       </form>
     </div>
 
@@ -699,6 +716,7 @@
         targetBodyFatPct: targetBfPct, targetWeight, targetDate, bmr, maintenanceCalories,
         matadorStartDate: startDate, matadorCycleDays: 14,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        initialWeight: weight, initialBodyFatPct: bfPct,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };
 
@@ -1421,10 +1439,13 @@
      */
     async function loadSettingsData() {
       if(!userData) return;
+      getEl('prof-matador-start').value = userData.matadorStartDate || '';
+      getEl('prof-height').value = userData.height || '';
+      getEl('prof-init-weight').value = userData.initialWeight || userData.weight || '';
+      getEl('prof-init-bodyfat').value = userData.initialBodyFatPct || userData.bodyFatPct || '';
       getEl('prof-target-fat').value = userData.targetBodyFatPct || '';
       getEl('prof-target-weight').value = userData.targetWeight || '';
       getEl('prof-target-date').value = userData.targetDate || '';
-      getEl('prof-matador-start').value = userData.matadorStartDate || '';
 
       // Action Plans
       const snap = await db.collection('users').doc(currentUser.uid).collection('action_plans').get();
