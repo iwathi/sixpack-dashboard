@@ -1311,6 +1311,25 @@
           let cur = new Date(startDate);
           let phaseCount = 1;
           const cycleDays = userData.matadorCycleDays || 14;
+          const now = new Date(); now.setHours(0,0,0,0);
+          
+          // 残りの減量日数を事前計算 (今日以降の目標計算用)
+          let remDeficitDays = 0;
+          let tempD = new Date(now > startDate ? now : startDate);
+          while (tempD <= tgtDate) {
+             const daysFromStart = Math.floor((tempD - startDate) / (1000*60*60*24));
+             const pIdx = Math.floor(daysFromStart / cycleDays);
+             if (pIdx % 2 === 0) remDeficitDays++; // 偶数インデックスが減量期(0, 2, 4...)
+             tempD.setDate(tempD.getDate() + 1);
+          }
+          
+          const curW = userData.weight || 0;
+          const tgtW = userData.targetWeight || 0;
+          // 目標までの残り体重 (既に達成していれば0)
+          const remWeightLoss = Math.max(0, curW - tgtW);
+          const dailyDrop = remDeficitDays > 0 ? remWeightLoss / remDeficitDays : 0;
+          
+          let projectedW = curW;
           
           while(cur <= tgtDate && phaseCount <= 20) {
              const isDeficit = (phaseCount % 2 !== 0);
@@ -1325,23 +1344,46 @@
              const endStr = `${pEndStr.getMonth()+1}/${pEndStr.getDate()}`;
              
              // 過去・現在・未来の判定 (UIの透明度調整)
-             const now = new Date(); now.setHours(0,0,0,0);
              let opacity = 1.0;
              let badge = '';
+             let targetText = '';
+             
              if (pEndStr < now) {
                 opacity = 0.5; // 過去
-             } else if (cur <= now && now <= pEndStr) {
-                badge = '<span style="background:var(--primary);color:white;padding:2px 4px;border-radius:4px;font-size:0.65rem;margin-left:8px;">現在</span>';
+                targetText = `<div style="font-size:0.75rem; color:var(--subtext); margin-top:4px;">※この期間は終了しました</div>`;
+             } else {
+                if (cur <= now && now <= pEndStr) {
+                   badge = '<span style="background:var(--primary);color:white;padding:2px 4px;border-radius:4px;font-size:0.65rem;margin-left:8px;">現在</span>';
+                }
+                
+                let dropInThisPhase = 0;
+                if (isDeficit) {
+                   const effectiveStart = cur > now ? cur : now;
+                   const days = Math.floor((pEndStr - effectiveStart) / (1000*60*60*24)) + 1;
+                   dropInThisPhase = days * dailyDrop;
+                   projectedW -= dropInThisPhase;
+                   
+                   targetText = `<div style="font-size:0.8rem; font-weight:bold; color:var(--danger); margin-top:6px; padding:6px; background:#fee2e2; border-radius:4px; display:inline-block; line-height:1.4;">
+                     🎯 期間の目標: <span style="font-size:0.9rem;">-${dropInThisPhase.toFixed(1)}kg</span> 減量<br>
+                     🏁 期末の目安体重: <span style="font-size:0.9rem;">${projectedW.toFixed(1)}kg</span>
+                   </div>`;
+                } else {
+                   targetText = `<div style="font-size:0.8rem; font-weight:bold; color:var(--success); margin-top:6px; padding:6px; background:#d1fae5; border-radius:4px; display:inline-block; line-height:1.4;">
+                     🎯 期間の目標: <span style="font-size:0.9rem;">±0kg</span> (維持)<br>
+                     🏁 期末の目安体重: <span style="font-size:0.9rem;">${projectedW.toFixed(1)}kg</span>
+                   </div>`;
+                }
              }
              
              scheduleHTML += `
-               <div style="display:flex; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #eee; opacity:${opacity};">
+               <div style="display:flex; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid #eee; opacity:${opacity};">
                  <div style="width:70px; flex-shrink:0; font-weight:bold; color:var(--subtext);">
                    ${startStr}<br>〜${endStr}
                  </div>
                  <div style="flex-grow:1; padding-left:12px; border-left:3px solid ${isDeficit ? 'var(--danger)' : 'var(--success)'};">
                    <div style="margin-bottom:4px;">${phaseName} ${badge}</div>
                    <div>${phaseGoal}</div>
+                   ${targetText}
                  </div>
                </div>
              `;
